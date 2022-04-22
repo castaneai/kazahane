@@ -10,7 +10,10 @@ binrw = "0.8.4"
 bytes = "1.1.0"
 tokio = {version = "1.17.0", features = ["full"]}
 axum = { version = "0.5.3", features = ["ws", "headers"] }
+envconfig = "0.10"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-hyper = "0.14.18"
-tower = "0.4.12"
+hyper = "0.14"
+tower = "0.4"
