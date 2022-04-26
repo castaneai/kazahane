@@ -1,9 +1,9 @@
-use std::net::SocketAddr;
 use envconfig::Envconfig;
+use kazahane::server;
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use kazahane::server;
 
 #[derive(Debug, Envconfig)]
 pub struct Config {
@@ -25,8 +25,7 @@ async fn main() {
 fn init_tracing() {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "kazahane=debug,tower_http=debug".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "kazahane=debug,tower_http=debug".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();

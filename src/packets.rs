@@ -35,7 +35,7 @@ fn write_packet() {
     use binrw::BinWrite;
 
     let mut writer = Cursor::new(Vec::new());
-    let packet = KazahanePacket{
+    let packet = KazahanePacket {
         packet_type: PacketType::HelloRequest,
         payload_size: 5,
         payload: b"world".to_vec(),
