@@ -5,14 +5,17 @@ version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "kazahane-server"
+path = "src/bin/server.rs"
+
 [dependencies]
 binrw = "0.8.4"
 tokio = {version = "1.17.0", features = ["full"]}
-axum = { version = "0.5.3", features = ["ws", "headers"] }
 envconfig = "0.10"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-[dev-dependencies]
-hyper = "0.14"
-tower = "0.4"
+anyhow = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+tokio-tungstenite = "0.17"

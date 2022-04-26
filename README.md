@@ -1,1 +1,7 @@
 # kazahane
+
+## Testing
+
+```
+cargo test
+```
