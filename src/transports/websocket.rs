@@ -65,7 +65,7 @@ where
                 .receiver
                 .next()
                 .await
-                .ok_or(anyhow!("stream closed"))?
+                .ok_or_else(|| anyhow!("stream closed"))?
                 .context("failed to receive")?;
             match msg {
                 Message::Binary(data) => {
