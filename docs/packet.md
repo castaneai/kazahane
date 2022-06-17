@@ -9,15 +9,17 @@
 [payload] (bytes[payload_size])
 ```
 
-## Packet Types
+## hello request (packet_type: 0x01)
 
-### hello request (0x01)
+### Payload
 
 ```
 [JSON Web Token] (variable length)
 ```
 
-### hello response (0x02)
+## hello response (packet_type: 0x02)
+
+### Payload
 
 ```
 [status_code] (uint8)
@@ -25,8 +27,8 @@
 [message] (bytes[message_length])
 ```
 
-### join room (0x03)
+### Status code:
 
-```
-[JSON Web Token] (variable length)
-```
+- 0x00: Unknown
+- 0x01: OK
+- 0x02: Denied

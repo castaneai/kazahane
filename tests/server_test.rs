@@ -2,9 +2,7 @@ use kazahane::packets::{KazahanePacket, PacketType};
 use kazahane::server::Connection;
 use kazahane::transports::websocket;
 use std::net::SocketAddr;
-use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::time::sleep;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 struct TestServer {
@@ -41,7 +39,8 @@ async fn hello_world() {
         payload: b"hello".to_vec(),
     };
     client.send(&p).await.expect("failed to send");
-    sleep(Duration::from_secs(3)).await;
+    let resp = client.recv().await.expect("failed to recv");
+    assert_eq!(PacketType::HelloResponse, resp.packet_type);
 }
 
 fn init_tracing() {

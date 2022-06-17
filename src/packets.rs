@@ -1,4 +1,6 @@
-use binrw::binrw;
+use std::io::Cursor;
+use anyhow::Context;
+use binrw::{binrw, BinWrite};
 
 #[derive(Debug)]
 #[binrw]
@@ -10,12 +12,58 @@ pub struct KazahanePacket {
     pub payload: Vec<u8>,
 }
 
+impl KazahanePacket {
+    pub fn new<T: BinWrite>(bw: T) -> crate::Result<Self>
+    where T::Args: Default {
+        let mut writer = Cursor::new(Vec::new());
+        bw.write_to(&mut writer).context("failed to write to kazahane packet")?;
+        let vec = writer.into_inner();
+        Ok(Self {
+            packet_type: PacketType::HelloResponse,
+            payload_size: vec.len() as u16,
+            payload: vec,
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 #[binrw]
 #[brw(repr = u8)]
 #[repr(u8)]
 pub enum PacketType {
     HelloRequest = 0x01,
+    HelloResponse = 0x02,
+}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct HelloResponsePacket {
+    pub status_code: HelloResponseStatusCode,
+    pub message_size: u16,
+    #[br(count = message_size)]
+    pub message: Vec<u8>,
+}
+
+impl HelloResponsePacket {
+    pub fn new(status_code: HelloResponseStatusCode, message: impl Into<Vec<u8>>) -> Self {
+        let vec = message.into();
+        Self {
+            status_code,
+            message_size: vec.len() as u16,
+            message: vec,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[binrw]
+#[brw(repr = u8)]
+#[repr(u8)]
+pub enum HelloResponseStatusCode {
+    Unknown = 0x00,
+    OK = 0x01,
+    Denied = 0x02,
 }
 
 #[test]
@@ -42,4 +90,17 @@ fn write_packet() {
     };
     packet.write_to(&mut writer).unwrap();
     assert_eq!(&writer.into_inner()[..], b"KAZAHANE 1.0.0\x01\x05\x00world");
+}
+
+#[test]
+fn hello_response() {
+    let p1 = HelloResponsePacket::new(
+        HelloResponseStatusCode::OK, "");
+    assert_eq!(p1.message_size, 0);
+    assert_eq!(p1.message, b"");
+
+    let p2 = HelloResponsePacket::new(
+        HelloResponseStatusCode::Denied, "err");
+    assert_eq!(p2.message_size, 3);
+    assert_eq!(p2.message, b"err");
 }

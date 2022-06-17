@@ -1,8 +1,9 @@
-use crate::packets::KazahanePacket;
+use anyhow::Context;
+use crate::packets::{HelloResponsePacket, HelloResponseStatusCode, KazahanePacket, PacketType};
 use crate::transports::websocket;
 use async_trait::async_trait;
 use tokio::net::TcpListener;
-use tracing::{debug, error};
+use tracing::{error, warn};
 
 pub async fn start(listener: &TcpListener) {
     while let Ok((stream, addr)) = listener.accept().await {
@@ -27,7 +28,16 @@ async fn handle(mut conn: impl Connection) {
     loop {
         match conn.recv().await {
             Ok(packet) => {
-                debug!("packet received: {:?}", packet);
+                match packet.packet_type {
+                    PacketType::HelloRequest => {
+                        if let Err(err) = handle_hello_request(&mut conn).await {
+                            error!("failed to handle hello request: {:?}", err)
+                        }
+                    }
+                    _ => {
+                        warn!("unknown packet received: {:?}", packet);
+                    }
+                }
             }
             Err(e) => {
                 error!("failed to receive packet: {:?}", e);
@@ -35,4 +45,10 @@ async fn handle(mut conn: impl Connection) {
             }
         }
     }
+}
+
+async fn handle_hello_request(conn: &mut impl Connection) -> crate::Result<()> {
+    let resp = HelloResponsePacket::new(HelloResponseStatusCode::Denied, "unimplemented");
+    let packet = KazahanePacket::new(&resp).context("failed to create hello response packet")?;
+    conn.send(&packet).await.context("failed to send hello response")
 }
