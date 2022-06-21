@@ -11,7 +11,7 @@ struct TestServer {
 
 impl TestServer {
     async fn connect(&self) -> impl Connection {
-        let url = format!("ws://{}", self.server_addr.to_string());
+        let url = format!("ws://{}", self.server_addr);
         websocket::connect(url).await.expect("failed to connect")
     }
 }

@@ -6,8 +6,8 @@ use tokio::net::TcpListener;
 use tracing::{error, warn};
 
 pub async fn start(listener: &TcpListener) {
-    while let Ok((stream, addr)) = listener.accept().await {
-        match websocket::accept(stream, addr).await {
+    loop {
+        match websocket::accept(listener).await {
             Ok(conn) => {
                 tokio::spawn(async move {
                     handle(conn).await;

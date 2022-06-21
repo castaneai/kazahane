@@ -6,9 +6,8 @@ use binrw::io::Cursor;
 use binrw::{BinRead, BinWrite};
 use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
-use std::net::SocketAddr;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
+use tokio::net::{TcpListener};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
@@ -20,8 +19,11 @@ pub async fn connect(url: impl IntoClientRequest + Unpin) -> crate::Result<impl 
     Ok(WebSocketConnection::new(ws_stream))
 }
 
-pub(crate) async fn accept(raw_stream: TcpStream, _: SocketAddr) -> crate::Result<impl Connection> {
-    let ws_stream = tokio_tungstenite::accept_async(raw_stream)
+pub(crate) async fn accept(listener: &TcpListener) -> crate::Result<impl Connection> {
+    let (stream, _) = listener.accept()
+        .await
+        .context("failed to accept TCP connection")?;
+    let ws_stream = tokio_tungstenite::accept_async(stream)
         .await
         .context("failed to accept as websocket")?;
     Ok(WebSocketConnection::new(ws_stream))
