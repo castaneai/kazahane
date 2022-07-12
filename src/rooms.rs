@@ -30,7 +30,7 @@ struct Room {
 }
 
 impl Room {
-    async fn handle_master_to_room(&mut self, msg: ServerToRoom) {
+    async fn handle_server_to_room(&mut self, msg: ServerToRoom) {
         match msg {
             ServerToRoom::Join {
                 conn_id,
