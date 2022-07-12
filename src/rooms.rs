@@ -10,6 +10,10 @@ pub(crate) async fn room_task(
     mut receiver: mpsc::Receiver<MessageToRoom>,
     dispatcher: Arc<Dispatcher>,
 ) {
+    defer! {
+        debug!("drop room: {}", room_id);
+        dispatcher.drop_room(&room_id);
+    }
     debug!("start room task (room_id: {})", room_id);
     let mut room = Room {
         room_id,

@@ -59,6 +59,10 @@ impl Dispatcher {
         rx
     }
 
+    pub fn drop_room(&self, room_id: &RoomID) {
+        self.room_senders.lock().unwrap().remove(room_id);
+    }
+
     pub async fn publish_to_room(&self, room_id: &RoomID, msg: MessageToRoom) {
         if let Some(sender) = self.room_sender(room_id) {
             sender.send(msg).await.unwrap();
@@ -79,6 +83,13 @@ impl Dispatcher {
             .unwrap()
             .insert(connection_id, tx);
         rx
+    }
+
+    pub fn drop_connection(&self, connection_id: &ConnectionID) {
+        self.connection_senders
+            .lock()
+            .unwrap()
+            .remove(connection_id);
     }
 
     pub async fn publish_to_connection(

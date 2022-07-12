@@ -15,6 +15,13 @@ pub(crate) async fn connection_task(
     mut receiver: mpsc::Receiver<MessageToConnection>,
     dispatcher: Arc<Dispatcher>,
 ) {
+    let connection_id = conn.connection_id();
+    defer! {
+        debug!("drop connection: {}", connection_id);
+        dispatcher.drop_connection(&connection_id);
+    }
+    debug!("start connection task (connection_id: {})", connection_id);
+
     loop {
         // TODO: handle shutdown
         tokio::select! {

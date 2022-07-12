@@ -329,6 +329,7 @@ dependencies = [
  "bytes",
  "envconfig",
  "futures",
+ "scopeguard",
  "tokio",
  "tokio-tungstenite",
  "tracing",
