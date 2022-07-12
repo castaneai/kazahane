@@ -1,6 +1,6 @@
-use std::io::Cursor;
 use anyhow::Context;
 use binrw::{binrw, BinWrite};
+use std::io::Cursor;
 
 #[derive(Debug)]
 #[binrw]
@@ -13,16 +13,28 @@ pub struct KazahanePacket {
 }
 
 impl KazahanePacket {
-    pub fn new<T: BinWrite>(bw: T) -> crate::Result<Self>
-    where T::Args: Default {
+    pub fn new<T: BinWrite>(packet_type: PacketType, bw: T) -> crate::Result<Self>
+    where
+        T::Args: Default,
+    {
         let mut writer = Cursor::new(Vec::new());
-        bw.write_to(&mut writer).context("failed to write to kazahane packet")?;
+        bw.write_to(&mut writer)
+            .context("failed to write to kazahane packet")?;
         let vec = writer.into_inner();
         Ok(Self {
-            packet_type: PacketType::HelloResponse,
+            packet_type,
             payload_size: vec.len() as u16,
             payload: vec,
         })
+    }
+
+    pub fn parse_payload<T>(&self) -> crate::Result<T>
+    where
+        T: binrw::BinRead,
+        T::Args: Default,
+    {
+        let mut cursor = Cursor::new(&self.payload);
+        T::read(&mut cursor).context("failed to parse")
     }
 }
 
@@ -33,6 +45,20 @@ impl KazahanePacket {
 pub enum PacketType {
     HelloRequest = 0x01,
     HelloResponse = 0x02,
+    JoinRoomRequest = 0x03,
+    JoinRoomResponse = 0x04,
+}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct HelloRequestPacket {}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct JoinRoomRequestPacket {
+    pub room_id: [u8; 16],
 }
 
 #[derive(Debug)]
@@ -94,13 +120,11 @@ fn write_packet() {
 
 #[test]
 fn hello_response() {
-    let p1 = HelloResponsePacket::new(
-        HelloResponseStatusCode::OK, "");
+    let p1 = HelloResponsePacket::new(HelloResponseStatusCode::OK, "");
     assert_eq!(p1.message_size, 0);
     assert_eq!(p1.message, b"");
 
-    let p2 = HelloResponsePacket::new(
-        HelloResponseStatusCode::Denied, "err");
+    let p2 = HelloResponsePacket::new(HelloResponseStatusCode::Denied, "err");
     assert_eq!(p2.message_size, 3);
     assert_eq!(p2.message, b"err");
 }

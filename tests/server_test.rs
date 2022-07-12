@@ -1,5 +1,5 @@
-use kazahane::packets::{KazahanePacket, PacketType};
-use kazahane::server::Connection;
+use kazahane::connections::Connection;
+use kazahane::packets::{HelloRequestPacket, JoinRoomRequestPacket, KazahanePacket, PacketType};
 use kazahane::transports::websocket;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -33,11 +33,8 @@ async fn hello_world() {
     let s = test_server().await;
     let mut client = s.connect().await;
 
-    let p = KazahanePacket {
-        packet_type: PacketType::HelloRequest,
-        payload_size: 5,
-        payload: b"hello".to_vec(),
-    };
+    let p = KazahanePacket::new(PacketType::HelloRequest, HelloRequestPacket {}).unwrap();
+
     client.send(&p).await.expect("failed to send");
     let resp = client.recv().await.expect("failed to recv");
     assert_eq!(PacketType::HelloResponse, resp.packet_type);

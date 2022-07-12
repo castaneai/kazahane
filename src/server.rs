@@ -1,54 +1,28 @@
-use anyhow::Context;
-use crate::packets::{HelloResponsePacket, HelloResponseStatusCode, KazahanePacket, PacketType};
+use crate::connections::connection_task;
+use crate::rooms::RoomMap;
 use crate::transports::websocket;
-use async_trait::async_trait;
+use crate::types::ConnectionToServer;
 use tokio::net::TcpListener;
-use tracing::{error, warn};
+use tokio::sync::mpsc;
+use tracing::debug;
 
 pub async fn start(listener: &TcpListener) {
+    let _rooms = RoomMap::new();
+    // TODO: buffer size
+    let (sender_to_server, mut rx) = mpsc::channel(8);
     loop {
-        match websocket::accept(listener).await {
-            Ok(conn) => {
-                tokio::spawn(async move {
-                    handle(conn).await;
-                });
+        tokio::select! {
+            Ok(conn) = websocket::accept(listener) => {
+                tokio::spawn(connection_task(conn, sender_to_server.clone()));
             }
-            Err(err) => error!("failed to accept: {:?}", err),
+            Some(msg) = rx.recv() => {
+                handle_connection_to_server(msg).await;
+            }
+            else => break
         }
     }
 }
 
-#[async_trait]
-pub trait Connection {
-    async fn send(&mut self, packet: &KazahanePacket) -> crate::Result<()>;
-    async fn recv(&mut self) -> crate::Result<KazahanePacket>;
-}
-
-async fn handle(mut conn: impl Connection) {
-    loop {
-        match conn.recv().await {
-            Ok(packet) => {
-                match packet.packet_type {
-                    PacketType::HelloRequest => {
-                        if let Err(err) = handle_hello_request(&mut conn).await {
-                            error!("failed to handle hello request: {:?}", err)
-                        }
-                    }
-                    _ => {
-                        warn!("unknown packet received: {:?}", packet);
-                    }
-                }
-            }
-            Err(e) => {
-                error!("failed to receive packet: {:?}", e);
-                break;
-            }
-        }
-    }
-}
-
-async fn handle_hello_request(conn: &mut impl Connection) -> crate::Result<()> {
-    let resp = HelloResponsePacket::new(HelloResponseStatusCode::Denied, "unimplemented");
-    let packet = KazahanePacket::new(&resp).context("failed to create hello response packet")?;
-    conn.send(&packet).await.context("failed to send hello response")
+async fn handle_connection_to_server(msg: ConnectionToServer) {
+    debug!("handle connection to server: {:?}", msg);
 }

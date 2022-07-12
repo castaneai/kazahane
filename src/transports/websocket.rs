@@ -1,5 +1,4 @@
 use crate::packets::KazahanePacket;
-use crate::server::Connection;
 use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use binrw::io::Cursor;
@@ -11,6 +10,7 @@ use tokio::net::{TcpListener};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
+use crate::connections::Connection;
 
 pub async fn connect(url: impl IntoClientRequest + Unpin) -> crate::Result<impl Connection> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(url)
