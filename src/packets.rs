@@ -47,6 +47,7 @@ pub enum PacketType {
     HelloResponse = 0x02,
     JoinRoomRequest = 0x03,
     JoinRoomResponse = 0x04,
+    BroadcastMessage = 0x05,
 }
 
 #[derive(Debug)]
@@ -58,7 +59,36 @@ pub struct HelloRequestPacket {}
 #[binrw]
 #[brw(little)]
 pub struct JoinRoomRequestPacket {
-    pub room_id: [u8; 16],
+    pub room_id: uuid::Bytes,
+}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct JoinRoomResponsePacket {}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct BroadcastMessagePacket {
+    pub sender: uuid::Bytes,
+    pub room_id: uuid::Bytes,
+    pub payload_size: u16,
+    #[br(count = payload_size)]
+    pub payload: Vec<u8>,
+}
+
+impl BroadcastMessagePacket {
+    pub fn new(sender: uuid::Bytes, room_id: uuid::Bytes, payload: impl Into<Vec<u8>>) -> Self {
+        let vec = payload.into();
+        let size = vec.len() as u16;
+        Self {
+            sender,
+            room_id,
+            payload_size: size,
+            payload: vec,
+        }
+    }
 }
 
 #[derive(Debug)]

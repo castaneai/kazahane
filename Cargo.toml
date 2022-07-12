@@ -10,6 +10,7 @@ name = "kazahane-server"
 path = "src/bin/server.rs"
 
 [dependencies]
+bytes = "1.1"
 binrw = "0.8.4"
 tokio = {version = "1.17.0", features = ["full"]}
 envconfig = "0.10"
@@ -19,3 +20,4 @@ anyhow = "1.0"
 async-trait = "0.1"
 futures = "0.3"
 tokio-tungstenite = "0.17"
+uuid = {version = "1.1", features = ["v4"]}

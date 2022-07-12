@@ -1,4 +1,6 @@
+use crate::connections::Connection;
 use crate::packets::KazahanePacket;
+use crate::types::ConnectionID;
 use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use binrw::io::Cursor;
@@ -6,11 +8,11 @@ use binrw::{BinRead, BinWrite};
 use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener};
+use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
-use crate::connections::Connection;
+use uuid::Uuid;
 
 pub async fn connect(url: impl IntoClientRequest + Unpin) -> crate::Result<impl Connection> {
     let (ws_stream, _) = tokio_tungstenite::connect_async(url)
@@ -20,7 +22,8 @@ pub async fn connect(url: impl IntoClientRequest + Unpin) -> crate::Result<impl 
 }
 
 pub(crate) async fn accept(listener: &TcpListener) -> crate::Result<impl Connection> {
-    let (stream, _) = listener.accept()
+    let (stream, _) = listener
+        .accept()
         .await
         .context("failed to accept TCP connection")?;
     let ws_stream = tokio_tungstenite::accept_async(stream)
@@ -31,6 +34,7 @@ pub(crate) async fn accept(listener: &TcpListener) -> crate::Result<impl Connect
 
 #[derive(Debug)]
 pub(crate) struct WebSocketConnection<S> {
+    connection_id: ConnectionID,
     sender: SplitSink<WebSocketStream<S>, Message>,
     receiver: SplitStream<WebSocketStream<S>>,
 }
@@ -41,7 +45,11 @@ impl<S> WebSocketConnection<S> {
         S: AsyncRead + AsyncWrite + Unpin,
     {
         let (sender, receiver) = ws.split();
-        Self { sender, receiver }
+        Self {
+            connection_id: Uuid::new_v4(),
+            sender,
+            receiver,
+        }
     }
 }
 
@@ -50,6 +58,10 @@ impl<S> Connection for WebSocketConnection<S>
 where
     S: Send + AsyncRead + AsyncWrite + Unpin,
 {
+    fn connection_id(&self) -> ConnectionID {
+        self.connection_id
+    }
+
     async fn send(&mut self, packet: &KazahanePacket) -> crate::Result<()> {
         let mut writer = Cursor::new(Vec::new());
         packet
