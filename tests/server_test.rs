@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use kazahane::connections::Connection;
+    use kazahane::dispatcher::{Dispatcher, MessageToServer, ServerShutdownReason};
     use kazahane::packets::{
         BroadcastMessagePacket, HelloRequestPacket, JoinRoomRequestPacket, PacketType,
         TestCountUpPacket, TestCountUpResponsePacket,
@@ -8,12 +9,13 @@ mod tests {
     use kazahane::transports::websocket;
     use kazahane::RoomID;
     use std::net::SocketAddr;
-    use std::sync::Once;
+    use std::sync::{Arc, Once};
     use tokio::net::TcpListener;
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
     struct TestServer {
         server_addr: SocketAddr,
+        dispatcher: Arc<Dispatcher>,
     }
 
     impl TestServer {
@@ -39,6 +41,14 @@ mod tests {
             );
             client
         }
+
+        async fn shutdown(&self) {
+            self.dispatcher
+                .publish_to_server(MessageToServer::Shutdown {
+                    reason: ServerShutdownReason::SigTerm,
+                })
+                .await;
+        }
     }
 
     async fn spawn_test_server() -> TestServer {
@@ -47,10 +57,15 @@ mod tests {
             .await
             .expect("failed to bind");
         let addr = listener.local_addr().expect("failed to get local addr");
+        let dispatcher = Arc::new(Dispatcher::new());
+        let disp = dispatcher.clone();
         tokio::spawn(async move {
-            kazahane::server::start(&listener, redis).await;
+            kazahane::server::start(&listener, redis, disp).await;
         });
-        TestServer { server_addr: addr }
+        TestServer {
+            server_addr: addr,
+            dispatcher,
+        }
     }
 
     #[tokio::test]
@@ -89,6 +104,41 @@ mod tests {
         c3.send(TestCountUpPacket {}).await.unwrap();
         let resp: TestCountUpResponsePacket = c3.recv().await.unwrap().parse_payload().unwrap();
         assert_eq!(resp.count, 1);
+    }
+
+    #[tokio::test]
+    async fn room_live_migration() {
+        init_tracing();
+
+        let server1 = spawn_test_server().await;
+        let room_id = new_random_room_id();
+        let mut c1 = server1.connect_and_join(room_id).await;
+
+        c1.send(TestCountUpPacket {}).await.unwrap();
+        let resp: TestCountUpResponsePacket = c1.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.count, 1);
+
+        let mut c2 = server1.connect_and_join(room_id).await;
+        c2.send(TestCountUpPacket {}).await.unwrap();
+        let resp: TestCountUpResponsePacket = c2.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.count, 2);
+
+        let server2 = spawn_test_server().await;
+
+        server1.shutdown().await;
+        assert_eq!(
+            c1.recv().await.unwrap().packet_type,
+            PacketType::ServerNotification
+        );
+        assert_eq!(
+            c2.recv().await.unwrap().packet_type,
+            PacketType::ServerNotification
+        );
+        let mut c1_next = server2.connect_and_join(room_id).await;
+        c1_next.send(TestCountUpPacket {}).await.unwrap();
+        let resp: TestCountUpResponsePacket =
+            c1_next.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.count, 3);
     }
 
     static LOGGER_INIT: Once = Once::new();

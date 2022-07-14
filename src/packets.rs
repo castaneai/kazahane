@@ -54,6 +54,7 @@ pub enum PacketType {
     JoinRoomResponse = 0x04,
     BroadcastMessage = 0x05,
     RoomNotification = 0x06,
+    ServerNotification = 0x07,
 
     TestCountUp = 0xDE,
     TestCountUpResponse = 0xDF,
@@ -203,6 +204,27 @@ impl TestCountUpResponsePacket {
 impl IntoPacket for TestCountUpResponsePacket {
     fn into_packet(self) -> crate::Result<Packet> {
         Packet::new(PacketType::TestCountUpResponse, self)
+    }
+}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct ServerNotificationPacket {
+    pub notification_type: ServerNotificationType,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[binrw]
+#[brw(repr = u8)]
+#[repr(u8)]
+pub enum ServerNotificationType {
+    Shutdown = 0x01,
+}
+
+impl IntoPacket for ServerNotificationPacket {
+    fn into_packet(self) -> crate::Result<Packet> {
+        Packet::new(PacketType::ServerNotification, self)
     }
 }
 

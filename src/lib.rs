@@ -1,7 +1,7 @@
 extern crate core;
 
 pub mod connections;
-mod dispatcher;
+pub mod dispatcher;
 pub mod packets;
 pub mod pubsub;
 pub mod room_states;

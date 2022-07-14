@@ -1,6 +1,6 @@
 use crate::connections::connection_task;
 use crate::connections::Connection;
-use crate::dispatcher::{Dispatcher, MessageToRoom, MessageToServer};
+use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom, MessageToServer};
 use crate::room_states::redis::RedisStateStore;
 use crate::rooms::room_task;
 use crate::transports::websocket;
@@ -8,15 +8,18 @@ use crate::RoomID;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+use tracing::{debug, info};
 
 type RoomMap = HashMap<RoomID, ()>;
 
-pub async fn start(listener: &TcpListener, redis: redis::Client) {
-    let (sender_to_server, mut receiver) = mpsc::channel(8);
-    let dispatcher = Arc::new(Dispatcher::new(sender_to_server));
+pub async fn start(listener: &TcpListener, redis: redis::Client, dispatcher: Arc<Dispatcher>) {
+    debug!(
+        "start kazahane server (listening on {:?})",
+        listener.local_addr()
+    );
     let mut rooms = RoomMap::new();
     let redis_conn = redis.get_tokio_connection_manager().await.unwrap();
+    let mut receiver = dispatcher.register_server();
     loop {
         tokio::select! {
             Ok(conn) = websocket::accept(listener) => {
@@ -56,6 +59,12 @@ async fn handle_message(
             });
             dispatcher
                 .publish_to_room(&room_id, MessageToRoom::Join { connection_id })
+                .await;
+        }
+        MessageToServer::Shutdown { reason } => {
+            info!("server received shutdown request (reason: {:?})", reason);
+            dispatcher
+                .broadcast_to_connections(MessageToConnection::Shutdown { reason })
                 .await;
         }
     }

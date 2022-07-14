@@ -2,7 +2,7 @@ use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom, MessageT
 use crate::packets::{
     BroadcastMessagePacket, HelloRequestPacket, HelloResponsePacket, HelloResponseStatusCode,
     IntoPacket, JoinRoomRequestPacket, JoinRoomResponsePacket, Packet, PacketType,
-    TestCountUpResponsePacket,
+    ServerNotificationPacket, ServerNotificationType, TestCountUpResponsePacket,
 };
 use crate::types::{ConnectionID, RoomID};
 use async_trait::async_trait;
@@ -59,6 +59,14 @@ struct ConnectionHandler {
 impl ConnectionHandler {
     async fn handle_message(&mut self, msg: MessageToConnection, conn: &mut impl Connection) {
         match (&self.room_status, msg) {
+            (_, MessageToConnection::Shutdown { reason }) => {
+                let packet = ServerNotificationPacket {
+                    notification_type: ServerNotificationType::Shutdown,
+                };
+                if let Err(err) = conn.send(packet).await {
+                    warn!("failed to send to client: {:?}", err);
+                }
+            }
             (RoomStatus::NotJoined, MessageToConnection::JoinResponse { room_id }) => {
                 self.room_status = RoomStatus::Joined { room_id };
                 let packet = JoinRoomResponsePacket {};

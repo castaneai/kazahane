@@ -1,6 +1,8 @@
 use envconfig::Envconfig;
+use kazahane::dispatcher::Dispatcher;
 use kazahane::server;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -23,7 +25,8 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.listen_port));
     let listener = TcpListener::bind(&addr).await.expect("failed to bind");
     let redis = redis::Client::open(config.redis_addr).unwrap();
-    server::start(&listener, redis).await;
+    let dispatcher = Arc::new(Dispatcher::new());
+    server::start(&listener, redis, dispatcher).await;
 }
 
 fn init_tracing() {

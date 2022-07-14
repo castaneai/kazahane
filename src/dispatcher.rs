@@ -5,45 +5,72 @@ use std::sync::Mutex;
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
-pub(crate) enum MessageToServer {
+pub enum MessageToServer {
     Join {
         connection_id: ConnectionID,
         room_id: RoomID,
     },
+    Shutdown {
+        reason: ServerShutdownReason,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub enum ServerShutdownReason {
+    SigTerm,
 }
 
 #[derive(Debug)]
-pub(crate) enum MessageToRoom {
+pub enum MessageToRoom {
     Join { connection_id: ConnectionID },
     Broadcast { payload: Bytes },
     TestCountUp { sender: ConnectionID },
 }
 
-#[derive(Debug)]
-pub(crate) enum MessageToConnection {
+#[derive(Clone, Debug)]
+pub enum MessageToConnection {
     JoinResponse { room_id: RoomID },
     Broadcast { payload: Bytes },
     TestCountUpResponse { counter: usize },
+    Shutdown { reason: ServerShutdownReason },
 }
 
 #[derive(Debug)]
-pub(crate) struct Dispatcher {
-    server_sender: mpsc::Sender<MessageToServer>,
+pub struct Dispatcher {
+    server_sender: Mutex<Option<mpsc::Sender<MessageToServer>>>,
     room_senders: Mutex<HashMap<RoomID, mpsc::Sender<MessageToRoom>>>,
     connection_senders: Mutex<HashMap<ConnectionID, mpsc::Sender<MessageToConnection>>>,
 }
 
+impl Default for Dispatcher {
+    fn default() -> Self {
+        Dispatcher::new()
+    }
+}
+
 impl Dispatcher {
-    pub fn new(server_sender: mpsc::Sender<MessageToServer>) -> Self {
+    pub fn new() -> Self {
         Self {
-            server_sender,
+            server_sender: Mutex::new(None),
             room_senders: Mutex::new(HashMap::new()),
             connection_senders: Mutex::new(HashMap::new()),
         }
     }
 
+    pub fn register_server(&self) -> mpsc::Receiver<MessageToServer> {
+        let (tx, rx) = mpsc::channel(8);
+        let _ = self.server_sender.lock().unwrap().insert(tx);
+        rx
+    }
+
     pub async fn publish_to_server(&self, msg: MessageToServer) {
-        self.server_sender.send(msg).await.unwrap();
+        if let Some(server_sender) = self.server_sender() {
+            server_sender.send(msg).await.unwrap();
+        }
+    }
+
+    fn server_sender(&self) -> Option<mpsc::Sender<MessageToServer>> {
+        self.server_sender.lock().unwrap().clone()
     }
 
     pub fn register_room(&self, room_id: RoomID) -> mpsc::Receiver<MessageToRoom> {
@@ -97,6 +124,12 @@ impl Dispatcher {
         }
     }
 
+    pub async fn broadcast_to_connections(&self, msg: MessageToConnection) {
+        for sender in self.all_connections() {
+            let _ = sender.send(msg.clone()).await;
+        }
+    }
+
     fn connection_sender(
         &self,
         connection_id: &ConnectionID,
@@ -106,5 +139,14 @@ impl Dispatcher {
             .unwrap()
             .get(connection_id)
             .cloned()
+    }
+
+    fn all_connections(&self) -> Vec<mpsc::Sender<MessageToConnection>> {
+        self.connection_senders
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect()
     }
 }
