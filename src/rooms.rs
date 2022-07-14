@@ -1,5 +1,5 @@
 use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom};
-use crate::pubsub::{MessageType, PubSub, PubSubMessage, PubSubPayloadBroadcast, PubSubTopic};
+use crate::pubsub::{PubSub, PubSubMessage, PubSubTopic};
 use crate::room_states::{RoomStateStore, StateData};
 use crate::types::{ConnectionID, RoomID};
 use bytes::Bytes;
@@ -30,8 +30,14 @@ pub(crate) async fn room_task(
                 room.handle_message(msg, &dispatcher, &mut pubsub, &mut state).await;
             }
             Ok(Some(msg)) = sub.next_message() => {
-                let msg = PubSubMessage::from_bytes(msg);
-                room.handle_pubsub_message(&msg, &dispatcher).await;
+                match PubSubMessage::from_bytes(msg) {
+                    Ok(msg) => {
+                        room.handle_pubsub_message(&msg, &dispatcher).await;
+                    }
+                    Err(err) => {
+                        error!("failed to parse pubsub message: {:?}", err)
+                    }
+                }
             }
             else => break
         }
@@ -71,7 +77,10 @@ impl Room {
                 payload, sender, ..
             } => {
                 self.broadcast(sender, payload.clone(), dispatcher).await;
-                let msg = PubSubPayloadBroadcast::new(sender, payload.to_vec());
+                let msg = PubSubMessage::Broadcast {
+                    sender: sender.into_bytes(),
+                    payload: payload.to_vec(),
+                };
                 if let Err(err) = pubsub.publish(self.topic(), msg).await {
                     error!("failed to publish broadcast message: {:?}", err);
                 }
@@ -120,12 +129,11 @@ impl Room {
     }
 
     async fn handle_pubsub_message(&self, msg: &PubSubMessage, dispatcher: &Dispatcher) {
-        match msg.message_type {
-            MessageType::Broadcast => {
+        match msg {
+            PubSubMessage::Broadcast { sender, payload } => {
                 // TODO: error handling
-                let msg = msg.parse_as_broadcast().unwrap();
-                let sender = ConnectionID::from_bytes(msg.sender);
-                self.broadcast(sender, Bytes::from(msg.payload), dispatcher)
+                let sender = ConnectionID::from_bytes(*sender);
+                self.broadcast(sender, Bytes::from(payload.to_vec()), dispatcher)
                     .await;
             }
         }

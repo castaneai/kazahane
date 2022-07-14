@@ -90,7 +90,7 @@ pub enum HelloResponseStatusCode {
 
 #[cfg(test)]
 mod tests {
-    use crate::packets::{HelloResponseStatusCode, Packet};
+    use crate::packets::Packet;
     use binrw::io::Cursor;
     use binrw::{BinReaderExt, BinWrite};
 

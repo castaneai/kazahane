@@ -1,10 +1,9 @@
-use crate::pubsub::{IntoPubSubMessage, PubSub, PubSubTopic, Subscription};
+use crate::pubsub::{PubSub, PubSubMessage, PubSubTopic, Subscription};
 use anyhow::Context;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::StreamExt;
 use redis::AsyncCommands;
-use std::fmt::Debug;
 use tracing::debug;
 
 pub(crate) struct RedisPubSub {
@@ -23,16 +22,10 @@ impl RedisPubSub {
 
 #[async_trait]
 impl PubSub for RedisPubSub {
-    async fn publish<T>(&mut self, topic: PubSubTopic, msg: T) -> crate::Result<()>
-    where
-        T: Debug + Send + IntoPubSubMessage,
-    {
+    async fn publish(&mut self, topic: PubSubTopic, msg: PubSubMessage) -> crate::Result<()> {
         debug!("publish to pubsub (topic: {}, data: {:?})", topic, msg);
         self.pub_conn
-            .publish(
-                topic.as_str(),
-                msg.into_pubsub_message().unwrap().to_vec().unwrap(),
-            )
+            .publish(topic.as_str(), msg.to_bytes().to_vec())
             .await
             .context("failed to publish")
     }
@@ -77,7 +70,7 @@ impl Subscription for RedisSubscription {
 #[cfg(test)]
 mod tests {
     use crate::pubsub::redis::RedisPubSub;
-    use crate::pubsub::{PubSub, PubSubMessage, PubSubPayloadBroadcast};
+    use crate::pubsub::{PubSub, PubSubMessage};
     use crate::types::ConnectionID;
 
     #[tokio::test]
@@ -87,9 +80,18 @@ mod tests {
         let mut pubsub = RedisPubSub::new(client, conn);
         let mut sub = pubsub.subscribe("test".to_string()).await.unwrap();
         let sender = ConnectionID::new_v4();
-        let msg = PubSubPayloadBroadcast::new(sender, b"hello".to_vec());
+        let msg = PubSubMessage::Broadcast {
+            sender: sender.into_bytes(),
+            payload: b"hello".to_vec(),
+        };
         pubsub.publish("test".to_string(), msg).await.unwrap();
-        let msg = PubSubMessage::from_bytes(sub.next_message().await.unwrap().unwrap());
-        assert_eq!(msg.parse_as_broadcast().unwrap().payload, b"hello");
+        let msg = PubSubMessage::from_bytes(sub.next_message().await.unwrap().unwrap()).unwrap();
+        assert_eq!(
+            msg,
+            PubSubMessage::Broadcast {
+                sender: sender.into_bytes(),
+                payload: b"hello".to_vec()
+            }
+        );
     }
 }
