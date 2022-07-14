@@ -7,33 +7,34 @@ use redis::AsyncCommands;
 
 struct RedisPubSub {
     client: redis::Client,
+    pub_conn: redis::aio::Connection,
 }
 
 impl RedisPubSub {
-    pub fn new(client: redis::Client) -> Self {
-        Self { client }
+    pub async fn new(client: redis::Client) -> crate::Result<Self> {
+        let pub_conn = client
+            .get_async_connection()
+            .await
+            .context("failed to connect to Redis")?;
+        Ok(Self { client, pub_conn })
     }
 }
 
 #[async_trait]
 impl PubSub for RedisPubSub {
-    async fn publish(&self, topic: Topic, data: Bytes) -> crate::Result<()> {
-        let mut conn = self
-            .client
-            .get_async_connection()
-            .await
-            .context("failed to get conn")?;
-        conn.publish(topic.as_str(), data.to_vec())
+    async fn publish(&mut self, topic: Topic, data: Bytes) -> crate::Result<()> {
+        self.pub_conn
+            .publish(topic.as_str(), data.to_vec())
             .await
             .context("failed to publish")
     }
 
-    async fn subscribe(&self, topic: Topic) -> crate::Result<Box<dyn Subscription>> {
+    async fn subscribe(&mut self, topic: Topic) -> crate::Result<Box<dyn Subscription>> {
         let conn = self
             .client
             .get_async_connection()
             .await
-            .context("failed to get conn")?;
+            .context("failed to create subscribe connection")?;
         let mut pubsub = conn.into_pubsub();
         pubsub
             .subscribe(topic)
@@ -70,7 +71,7 @@ mod tests {
     #[tokio::test]
     async fn test_redis() {
         let client = redis::Client::open("redis://127.0.0.1").unwrap();
-        let pubsub = RedisPubSub::new(client);
+        let mut pubsub = RedisPubSub::new(client).await.unwrap();
         let mut sub = pubsub.subscribe("test".to_string()).await.unwrap();
         pubsub
             .publish("test".to_string(), Bytes::from("hello"))

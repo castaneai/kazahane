@@ -7,8 +7,8 @@ type Topic = String;
 
 #[async_trait]
 pub(crate) trait PubSub {
-    async fn publish(&self, topic: Topic, data: Bytes) -> crate::Result<()>;
-    async fn subscribe(&self, topic: Topic) -> crate::Result<Box<dyn Subscription>>;
+    async fn publish(&mut self, topic: Topic, data: Bytes) -> crate::Result<()>;
+    async fn subscribe(&mut self, topic: Topic) -> crate::Result<Box<dyn Subscription>>;
 }
 
 #[async_trait]
