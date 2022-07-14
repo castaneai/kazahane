@@ -3,7 +3,6 @@ use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
-use tracing::debug;
 
 #[derive(Debug)]
 pub(crate) enum MessageToServer {

@@ -24,9 +24,7 @@ pub(crate) async fn room_task(
             Some(msg) = receiver.recv() => {
                 room.handle_message(msg, &dispatcher, &mut state).await;
             }
-            // TODO: else => break 入れるとなぜかすぐにroom dropされてしまう
-            // senderがまだ残ってるはずなのに……。
-            // else => break
+            else => break
         }
     }
     debug!("drop room: {}", room_id);

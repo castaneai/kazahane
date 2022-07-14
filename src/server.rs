@@ -43,7 +43,7 @@ async fn handle_message(
             connection_id,
             room_id,
         } => {
-            if !rooms.contains_key(&room_id) {
+            rooms.entry(room_id).or_insert_with(|| {
                 let room_receiver = dispatcher.register_room(room_id);
                 let room_state = RedisStateStore::new(room_id, redis_conn.clone());
                 // TODO: instrument task
@@ -53,7 +53,7 @@ async fn handle_message(
                     dispatcher.clone(),
                     room_state,
                 ));
-            }
+            });
             dispatcher
                 .publish_to_room(&room_id, MessageToRoom::Join { connection_id })
                 .await;
