@@ -1,5 +1,5 @@
 use crate::connections::Connection;
-use crate::packets::{IntoPacket, Packet};
+use crate::packets::Packet;
 use crate::types::ConnectionID;
 use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
@@ -62,12 +62,8 @@ where
         self.connection_id
     }
 
-    async fn send<P>(&mut self, packet: P) -> crate::Result<()>
-    where
-        P: Send + IntoPacket,
-    {
+    async fn send(&mut self, packet: Packet) -> crate::Result<()> {
         let mut writer = Cursor::new(Vec::new());
-        let packet = packet.into_packet()?;
         packet
             .write_to(&mut writer)
             .context("failed to write packet")?;

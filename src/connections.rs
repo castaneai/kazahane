@@ -1,9 +1,5 @@
 use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom, MessageToServer};
-use crate::packets::{
-    BroadcastMessagePacket, HelloRequestPacket, HelloResponsePacket, HelloResponseStatusCode,
-    IntoPacket, JoinRoomRequestPacket, JoinRoomResponsePacket, Packet, PacketType,
-    ServerNotificationPacket, ServerNotificationType, TestCountUpResponsePacket,
-};
+use crate::packets::{HelloResponseStatusCode, Packet, RoomNotification, ServerNotification};
 use crate::types::{ConnectionID, RoomID};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -14,9 +10,7 @@ use tracing::{debug, warn};
 #[async_trait]
 pub trait Connection {
     fn connection_id(&self) -> ConnectionID;
-    async fn send<P>(&mut self, packet: P) -> crate::Result<()>
-    where
-        P: Send + IntoPacket;
+    async fn send(&mut self, packet: Packet) -> crate::Result<()>;
     async fn recv(&mut self) -> crate::Result<Packet>;
 }
 
@@ -59,17 +53,15 @@ struct ConnectionHandler {
 impl ConnectionHandler {
     async fn handle_message(&mut self, msg: MessageToConnection, conn: &mut impl Connection) {
         match (&self.room_status, msg) {
-            (_, MessageToConnection::Shutdown { reason }) => {
-                let packet = ServerNotificationPacket {
-                    notification_type: ServerNotificationType::Shutdown,
-                };
+            (_, MessageToConnection::Shutdown { .. }) => {
+                let packet = Packet::ServerNotification(ServerNotification::Shutdown);
                 if let Err(err) = conn.send(packet).await {
                     warn!("failed to send to client: {:?}", err);
                 }
             }
             (RoomStatus::NotJoined, MessageToConnection::JoinResponse { room_id }) => {
                 self.room_status = RoomStatus::Joined { room_id };
-                let packet = JoinRoomResponsePacket {};
+                let packet = Packet::JoinRoomResponse {};
                 if let Err(err) = conn.send(packet).await {
                     warn!("failed to send to client: {:?}", err);
                 }
@@ -77,13 +69,15 @@ impl ConnectionHandler {
             (RoomStatus::Joined { .. }, msg) => match msg {
                 MessageToConnection::Broadcast { payload, .. } => {
                     let payload = payload.to_vec();
-                    let packet = BroadcastMessagePacket::new(payload);
+                    let packet = Packet::RoomNotification(RoomNotification::Broadcast { payload });
                     if let Err(err) = conn.send(packet).await {
                         warn!("failed to send to client: {:?}", err);
                     }
                 }
                 MessageToConnection::TestCountUpResponse { counter } => {
-                    let packet = TestCountUpResponsePacket::new(counter);
+                    let packet = Packet::TestCountUpResponse {
+                        counter: counter as u64,
+                    };
                     if let Err(err) = conn.send(packet).await {
                         warn!("failed to send to client: {:?}", err);
                     }
@@ -102,21 +96,19 @@ impl ConnectionHandler {
         conn: &mut impl Connection,
         dispatcher: &Dispatcher,
     ) {
-        match (&self.room_status, &packet.packet_type) {
-            (RoomStatus::NotJoined, PacketType::HelloRequest) => {
-                let packet = packet.parse_payload().unwrap();
-                self.handle_hello(packet, conn).await;
+        match (&self.room_status, &packet) {
+            (RoomStatus::NotJoined, Packet::HelloRequest { token }) => {
+                self.handle_hello(token, conn).await;
             }
-            (RoomStatus::NotJoined, PacketType::JoinRoomRequest) => {
-                let packet = packet.parse_payload().unwrap();
-                self.handle_join_room(packet, conn, dispatcher).await;
+            (RoomStatus::NotJoined, Packet::JoinRoomRequest { room_id }) => {
+                let room_id = RoomID::from_bytes(*room_id);
+                self.handle_join_room(room_id, conn, dispatcher).await;
             }
-            (RoomStatus::Joined { room_id }, PacketType::BroadcastMessage) => {
-                let packet = packet.parse_payload().unwrap();
-                self.handle_broadcast(packet, conn, *room_id, dispatcher)
+            (RoomStatus::Joined { room_id }, Packet::BroadcastRequest { payload }) => {
+                self.handle_broadcast(payload, conn, *room_id, dispatcher)
                     .await;
             }
-            (RoomStatus::Joined { room_id }, PacketType::TestCountUp) => {
+            (RoomStatus::Joined { room_id }, Packet::TestCountUp {}) => {
                 dispatcher
                     .publish_to_room(
                         room_id,
@@ -132,32 +124,32 @@ impl ConnectionHandler {
         }
     }
 
-    async fn handle_hello(&self, _: HelloRequestPacket, conn: &mut impl Connection) {
-        let resp = HelloResponsePacket {
+    async fn handle_hello(&self, _token: &[u8], conn: &mut impl Connection) {
+        conn.send(Packet::HelloResponse {
             status_code: HelloResponseStatusCode::OK,
-            message_size: 5,
-            message: "hello".as_bytes().to_vec(),
-        };
-        conn.send(resp).await.unwrap();
+            message: vec![],
+        })
+        .await
+        .unwrap();
     }
 
     async fn handle_join_room(
         &self,
-        req: JoinRoomRequestPacket,
+        room_id: RoomID,
         conn: &impl Connection,
         dispatcher: &Dispatcher,
     ) {
         dispatcher
             .publish_to_server(MessageToServer::Join {
                 connection_id: conn.connection_id(),
-                room_id: RoomID::from_bytes(req.room_id),
+                room_id,
             })
             .await;
     }
 
     async fn handle_broadcast(
         &self,
-        packet: BroadcastMessagePacket,
+        payload: &[u8],
         conn: &impl Connection,
         room_id: RoomID,
         dispatcher: &Dispatcher,
@@ -167,7 +159,7 @@ impl ConnectionHandler {
                 &room_id,
                 MessageToRoom::Broadcast {
                     sender: conn.connection_id(),
-                    payload: Bytes::from(packet.payload),
+                    payload: Bytes::from(payload.to_vec()),
                 },
             )
             .await;

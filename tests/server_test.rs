@@ -3,8 +3,7 @@ mod tests {
     use kazahane::connections::Connection;
     use kazahane::dispatcher::{Dispatcher, MessageToServer, ServerShutdownReason};
     use kazahane::packets::{
-        BroadcastMessagePacket, HelloRequestPacket, JoinRoomRequestPacket, PacketType,
-        TestCountUpPacket, TestCountUpResponsePacket,
+        HelloResponseStatusCode, Packet, RoomNotification, ServerNotification,
     };
     use kazahane::transports::websocket;
     use kazahane::RoomID;
@@ -26,19 +25,29 @@ mod tests {
 
         async fn connect_and_join(&self, room_id: RoomID) -> impl Connection {
             let mut client = self.connect().await;
-            client.send(HelloRequestPacket {}).await.unwrap();
-            assert_eq!(
-                client.recv().await.unwrap().packet_type,
-                PacketType::HelloResponse
-            );
             client
-                .send(JoinRoomRequestPacket::new(room_id))
+                .send(Packet::HelloRequest {
+                    token: b"".to_vec(),
+                })
                 .await
                 .unwrap();
-            assert_eq!(
-                client.recv().await.unwrap().packet_type,
-                PacketType::JoinRoomResponse
-            );
+            assert!(matches!(
+                client.recv().await.unwrap(),
+                Packet::HelloResponse {
+                    status_code: HelloResponseStatusCode::OK,
+                    ..
+                }
+            ));
+            client
+                .send(Packet::JoinRoomRequest {
+                    room_id: room_id.into_bytes(),
+                })
+                .await
+                .unwrap();
+            assert!(matches!(
+                client.recv().await.unwrap(),
+                Packet::JoinRoomResponse { .. }
+            ));
             client
         }
 
@@ -87,13 +96,25 @@ mod tests {
         let mut c2 = server.connect_and_join(room_id).await;
         let mut c3 = server.connect_and_join(room_id).await;
 
-        let packet = BroadcastMessagePacket::new("hello");
+        let packet = Packet::BroadcastRequest {
+            payload: b"hello".to_vec(),
+        };
         c1.send(packet).await.unwrap();
 
-        let resp: BroadcastMessagePacket = c2.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.payload, b"hello");
-        let resp: BroadcastMessagePacket = c3.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.payload, b"hello");
+        let resp = c2.recv().await.unwrap();
+        assert_eq!(
+            resp,
+            Packet::RoomNotification(RoomNotification::Broadcast {
+                payload: b"hello".to_vec()
+            })
+        );
+        let resp = c3.recv().await.unwrap();
+        assert_eq!(
+            resp,
+            Packet::RoomNotification(RoomNotification::Broadcast {
+                payload: b"hello".to_vec()
+            })
+        );
     }
 
     #[tokio::test]
@@ -109,13 +130,25 @@ mod tests {
         let mut c2 = server2.connect_and_join(room_id).await;
         let mut c3 = server3.connect_and_join(room_id).await;
 
-        let packet = BroadcastMessagePacket::new("hello");
+        let packet = Packet::BroadcastRequest {
+            payload: b"hello".to_vec(),
+        };
         c1.send(packet).await.unwrap();
 
-        let resp: BroadcastMessagePacket = c2.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.payload, b"hello");
-        let resp: BroadcastMessagePacket = c3.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.payload, b"hello");
+        let resp = c2.recv().await.unwrap();
+        assert_eq!(
+            resp,
+            Packet::RoomNotification(RoomNotification::Broadcast {
+                payload: b"hello".to_vec()
+            })
+        );
+        let resp = c3.recv().await.unwrap();
+        assert_eq!(
+            resp,
+            Packet::RoomNotification(RoomNotification::Broadcast {
+                payload: b"hello".to_vec()
+            })
+        );
     }
 
     #[tokio::test]
@@ -126,20 +159,20 @@ mod tests {
         let room_id = new_random_room_id();
         let mut c1 = server.connect_and_join(room_id).await;
 
-        c1.send(TestCountUpPacket {}).await.unwrap();
-        let resp: TestCountUpResponsePacket = c1.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.count, 1);
+        c1.send(Packet::TestCountUp {}).await.unwrap();
+        let resp = c1.recv().await.unwrap();
+        assert_eq!(resp, Packet::TestCountUpResponse { counter: 1 });
 
         let mut c2 = server.connect_and_join(room_id).await;
-        c2.send(TestCountUpPacket {}).await.unwrap();
-        let resp: TestCountUpResponsePacket = c2.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.count, 2);
+        c2.send(Packet::TestCountUp {}).await.unwrap();
+        let resp = c2.recv().await.unwrap();
+        assert_eq!(resp, Packet::TestCountUpResponse { counter: 2 });
 
         let another_room_id = new_random_room_id();
         let mut c3 = server.connect_and_join(another_room_id).await;
-        c3.send(TestCountUpPacket {}).await.unwrap();
-        let resp: TestCountUpResponsePacket = c3.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.count, 1);
+        c3.send(Packet::TestCountUp {}).await.unwrap();
+        let resp = c3.recv().await.unwrap();
+        assert_eq!(resp, Packet::TestCountUpResponse { counter: 1 });
     }
 
     #[tokio::test]
@@ -147,34 +180,35 @@ mod tests {
         init_tracing();
 
         let server1 = spawn_test_server().await;
-        let room_id = new_random_room_id();
-        let mut c1 = server1.connect_and_join(room_id).await;
-
-        c1.send(TestCountUpPacket {}).await.unwrap();
-        let resp: TestCountUpResponsePacket = c1.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.count, 1);
-
-        let mut c2 = server1.connect_and_join(room_id).await;
-        c2.send(TestCountUpPacket {}).await.unwrap();
-        let resp: TestCountUpResponsePacket = c2.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.count, 2);
-
         let server2 = spawn_test_server().await;
 
+        let room_id = new_random_room_id();
+
+        let mut c1 = server1.connect_and_join(room_id).await;
+        c1.send(Packet::TestCountUp {}).await.unwrap();
+        let resp = c1.recv().await.unwrap();
+        assert_eq!(resp, Packet::TestCountUpResponse { counter: 1 });
+
+        let mut c2 = server1.connect_and_join(room_id).await;
+        c2.send(Packet::TestCountUp {}).await.unwrap();
+        let resp = c2.recv().await.unwrap();
+        assert_eq!(resp, Packet::TestCountUpResponse { counter: 2 });
+
         server1.shutdown().await;
+
         assert_eq!(
-            c1.recv().await.unwrap().packet_type,
-            PacketType::ServerNotification
+            c1.recv().await.unwrap(),
+            Packet::ServerNotification(ServerNotification::Shutdown)
         );
         assert_eq!(
-            c2.recv().await.unwrap().packet_type,
-            PacketType::ServerNotification
+            c2.recv().await.unwrap(),
+            Packet::ServerNotification(ServerNotification::Shutdown)
         );
+
         let mut c1_next = server2.connect_and_join(room_id).await;
-        c1_next.send(TestCountUpPacket {}).await.unwrap();
-        let resp: TestCountUpResponsePacket =
-            c1_next.recv().await.unwrap().parse_payload().unwrap();
-        assert_eq!(resp.count, 3);
+        c1_next.send(Packet::TestCountUp {}).await.unwrap();
+        let resp = c1_next.recv().await.unwrap();
+        assert_eq!(resp, Packet::TestCountUpResponse { counter: 3 });
     }
 
     static LOGGER_INIT: Once = Once::new();
