@@ -1,5 +1,5 @@
 use crate::connections::Connection;
-use crate::packets::KazahanePacket;
+use crate::packets::{IntoPacket, Packet};
 use crate::types::ConnectionID;
 use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
@@ -62,8 +62,12 @@ where
         self.connection_id
     }
 
-    async fn send(&mut self, packet: &KazahanePacket) -> crate::Result<()> {
+    async fn send<P>(&mut self, packet: P) -> crate::Result<()>
+    where
+        P: Send + IntoPacket,
+    {
         let mut writer = Cursor::new(Vec::new());
+        let packet = packet.into_packet()?;
         packet
             .write_to(&mut writer)
             .context("failed to write packet")?;
@@ -73,7 +77,7 @@ where
             .context("failed to send message")
     }
 
-    async fn recv(&mut self) -> crate::Result<KazahanePacket> {
+    async fn recv(&mut self) -> crate::Result<Packet> {
         loop {
             let msg = self
                 .receiver
@@ -84,7 +88,7 @@ where
             match msg {
                 Message::Binary(data) => {
                     let mut cursor = Cursor::new(data);
-                    return KazahanePacket::read(&mut cursor).context("failed to parse");
+                    return Packet::read(&mut cursor).context("failed to parse");
                 }
                 Message::Ping(_) => continue,
                 Message::Pong(_) => continue,

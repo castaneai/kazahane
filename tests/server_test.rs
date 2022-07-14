@@ -2,8 +2,7 @@
 mod tests {
     use kazahane::connections::Connection;
     use kazahane::packets::{
-        BroadcastMessagePacket, HelloRequestPacket, JoinRoomRequestPacket, KazahanePacket,
-        PacketType,
+        BroadcastMessagePacket, HelloRequestPacket, JoinRoomRequestPacket, PacketType,
     };
     use kazahane::transports::websocket;
     use kazahane::RoomID;
@@ -42,9 +41,8 @@ mod tests {
         let s = test_server().await;
         let mut client = s.connect().await;
 
-        let p = KazahanePacket::new(PacketType::HelloRequest, HelloRequestPacket {}).unwrap();
-
-        client.send(&p).await.expect("failed to send");
+        let req = HelloRequestPacket {};
+        client.send(req).await.expect("failed to send");
         let resp = client.recv().await.expect("failed to recv");
         assert_eq!(PacketType::HelloResponse, resp.packet_type);
     }
@@ -57,29 +55,20 @@ mod tests {
         let mut c1 = s.connect().await;
 
         let room_id = new_random_room_id();
-        let req = KazahanePacket::new(
-            PacketType::JoinRoomRequest,
-            JoinRoomRequestPacket {
-                room_id: room_id.into_bytes(),
-            },
-        )
-        .unwrap();
-
-        c1.send(&req).await.unwrap();
+        let req = JoinRoomRequestPacket {
+            room_id: room_id.into_bytes(),
+        };
+        c1.send(req).await.unwrap();
         let resp = c1.recv().await.unwrap();
         assert_eq!(PacketType::JoinRoomResponse, resp.packet_type);
 
-        let p = KazahanePacket::new(
-            PacketType::BroadcastMessage,
-            BroadcastMessagePacket {
-                room_id: room_id.into_bytes(),
-                sender: c1.connection_id().into_bytes(),
-                payload: "world".as_bytes().to_vec(),
-                payload_size: 5,
-            },
-        )
-        .unwrap();
-        c1.send(&p).await.unwrap();
+        let p = BroadcastMessagePacket {
+            room_id: room_id.into_bytes(),
+            sender: c1.connection_id().into_bytes(),
+            payload: "world".as_bytes().to_vec(),
+            payload_size: 5,
+        };
+        c1.send(p).await.unwrap();
         let resp = c1.recv().await.unwrap();
         assert_eq!(PacketType::BroadcastMessage, resp.packet_type);
     }

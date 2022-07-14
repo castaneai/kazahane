@@ -1,7 +1,7 @@
 use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom, MessageToServer};
 use crate::packets::{
     BroadcastMessagePacket, HelloRequestPacket, HelloResponsePacket, HelloResponseStatusCode,
-    JoinRoomRequestPacket, JoinRoomResponsePacket, KazahanePacket, PacketType,
+    IntoPacket, JoinRoomRequestPacket, JoinRoomResponsePacket, Packet, PacketType,
 };
 use crate::types::{ConnectionID, RoomID};
 use async_trait::async_trait;
@@ -9,6 +9,15 @@ use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
+
+#[async_trait]
+pub trait Connection {
+    fn connection_id(&self) -> ConnectionID;
+    async fn send<P>(&mut self, packet: P) -> crate::Result<()>
+    where
+        P: Send + IntoPacket;
+    async fn recv(&mut self) -> crate::Result<Packet>;
+}
 
 pub(crate) async fn connection_task(
     mut conn: impl Connection,
@@ -43,24 +52,19 @@ async fn handle_message(msg: MessageToConnection, conn: &mut impl Connection) {
             payload,
         } => {
             let payload = payload.to_vec();
-            let packet = KazahanePacket::new(
-                PacketType::BroadcastMessage,
-                BroadcastMessagePacket::new(sender.into_bytes(), room_id.into_bytes(), payload),
-            )
-            .unwrap();
-            conn.send(&packet).await.unwrap();
+            let packet =
+                BroadcastMessagePacket::new(sender.into_bytes(), room_id.into_bytes(), payload);
+            conn.send(packet).await.unwrap();
         }
         MessageToConnection::JoinResponse => {
-            let packet =
-                KazahanePacket::new(PacketType::JoinRoomResponse, JoinRoomResponsePacket {})
-                    .unwrap();
-            conn.send(&packet).await.unwrap();
+            let packet = JoinRoomResponsePacket {};
+            conn.send(packet).await.unwrap();
         }
     }
 }
 
 async fn handle_packet_from_conn(
-    packet: &KazahanePacket,
+    packet: &Packet,
     conn: &mut impl Connection,
     dispatcher: &Arc<Dispatcher>,
 ) {
@@ -85,16 +89,12 @@ async fn handle_packet_from_conn(
 }
 
 async fn handle_hello(_: HelloRequestPacket, conn: &mut impl Connection) {
-    let resp = KazahanePacket::new(
-        PacketType::HelloResponse,
-        HelloResponsePacket {
-            status_code: HelloResponseStatusCode::OK,
-            message_size: 5,
-            message: "hello".as_bytes().to_vec(),
-        },
-    )
-    .unwrap();
-    conn.send(&resp).await.unwrap();
+    let resp = HelloResponsePacket {
+        status_code: HelloResponseStatusCode::OK,
+        message_size: 5,
+        message: "hello".as_bytes().to_vec(),
+    };
+    conn.send(resp).await.unwrap();
 }
 
 async fn handle_join_room(
@@ -122,11 +122,4 @@ async fn handle_broadcast(packet: BroadcastMessagePacket, dispatcher: &Dispatche
             },
         )
         .await;
-}
-
-#[async_trait]
-pub trait Connection {
-    fn connection_id(&self) -> ConnectionID;
-    async fn send(&mut self, packet: &KazahanePacket) -> crate::Result<()>;
-    async fn recv(&mut self) -> crate::Result<KazahanePacket>;
 }

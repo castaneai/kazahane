@@ -5,7 +5,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use redis::AsyncCommands;
 
-struct RedisPubSub {
+pub(crate) struct RedisPubSub {
     client: redis::Client,
     pub_conn: redis::aio::Connection,
 }
