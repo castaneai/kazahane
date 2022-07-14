@@ -52,8 +52,7 @@ async fn handle_message(msg: MessageToConnection, conn: &mut impl Connection) {
             payload,
         } => {
             let payload = payload.to_vec();
-            let packet =
-                BroadcastMessagePacket::new(sender.into_bytes(), room_id.into_bytes(), payload);
+            let packet = BroadcastMessagePacket::new(sender, room_id, payload);
             conn.send(packet).await.unwrap();
         }
         MessageToConnection::JoinResponse => {

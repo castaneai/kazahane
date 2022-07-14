@@ -1,3 +1,5 @@
+use crate::types::ConnectionID;
+use crate::RoomID;
 use anyhow::Context;
 use binrw::{binrw, BinWrite};
 use std::io::Cursor;
@@ -116,6 +118,14 @@ impl IntoPacket for JoinRoomRequestPacket {
     }
 }
 
+impl JoinRoomRequestPacket {
+    pub fn new(room_id: RoomID) -> Self {
+        Self {
+            room_id: room_id.into_bytes(),
+        }
+    }
+}
+
 #[derive(Debug)]
 #[binrw]
 #[brw(little)]
@@ -145,12 +155,12 @@ impl IntoPacket for BroadcastMessagePacket {
 }
 
 impl BroadcastMessagePacket {
-    pub fn new(sender: uuid::Bytes, room_id: uuid::Bytes, payload: impl Into<Vec<u8>>) -> Self {
+    pub fn new(sender: ConnectionID, room_id: RoomID, payload: impl Into<Vec<u8>>) -> Self {
         let vec = payload.into();
         let size = vec.len() as u16;
         Self {
-            sender,
-            room_id,
+            sender: sender.into_bytes(),
+            room_id: room_id.into_bytes(),
             payload_size: size,
             payload: vec,
         }
