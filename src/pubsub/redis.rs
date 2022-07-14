@@ -9,16 +9,15 @@ use tracing::debug;
 
 pub(crate) struct RedisPubSub {
     client: redis::Client,
-    pub_conn: redis::aio::Connection,
+    pub_conn: redis::aio::ConnectionManager,
 }
 
 impl RedisPubSub {
-    pub async fn new(client: redis::Client) -> crate::Result<Self> {
-        let pub_conn = client
-            .get_async_connection()
-            .await
-            .context("failed to connect to Redis")?;
-        Ok(Self { client, pub_conn })
+    pub fn new(client: redis::Client, conn: redis::aio::ConnectionManager) -> Self {
+        Self {
+            client,
+            pub_conn: conn,
+        }
     }
 }
 
@@ -84,7 +83,8 @@ mod tests {
     #[tokio::test]
     async fn test_redis() {
         let client = redis::Client::open("redis://127.0.0.1").unwrap();
-        let mut pubsub = RedisPubSub::new(client).await.unwrap();
+        let conn = client.get_tokio_connection_manager().await.unwrap();
+        let mut pubsub = RedisPubSub::new(client, conn);
         let mut sub = pubsub.subscribe("test".to_string()).await.unwrap();
         let sender = ConnectionID::new_v4();
         let msg = PubSubPayloadBroadcast::new(sender, b"hello".to_vec());

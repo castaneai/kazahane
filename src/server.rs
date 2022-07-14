@@ -1,6 +1,7 @@
 use crate::connections::connection_task;
 use crate::connections::Connection;
 use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom, MessageToServer};
+use crate::pubsub::redis::RedisPubSub;
 use crate::room_states::redis::RedisStateStore;
 use crate::rooms::room_task;
 use crate::transports::websocket;
@@ -50,14 +51,14 @@ async fn handle_message(
             rooms.entry(room_id).or_insert_with(|| {
                 let room_receiver = dispatcher.register_room(room_id);
                 let room_state = RedisStateStore::new(room_id, redis_conn.clone());
-                let redis = redis.clone();
+                let pubsub = RedisPubSub::new(redis, redis_conn.clone());
                 // TODO: instrument task
                 tokio::spawn(room_task(
                     room_id,
                     room_receiver,
                     dispatcher.clone(),
                     room_state,
-                    redis,
+                    pubsub,
                 ));
             });
             dispatcher

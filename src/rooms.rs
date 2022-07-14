@@ -1,5 +1,4 @@
 use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom};
-use crate::pubsub::redis::RedisPubSub;
 use crate::pubsub::{MessageType, PubSub, PubSubMessage, PubSubPayloadBroadcast, PubSubTopic};
 use crate::room_states::{RoomStateStore, StateData};
 use crate::types::{ConnectionID, RoomID};
@@ -15,7 +14,7 @@ pub(crate) async fn room_task(
     mut receiver: mpsc::Receiver<MessageToRoom>,
     dispatcher: Arc<Dispatcher>,
     mut state: impl RoomStateStore,
-    redis: redis::Client, // TODO: impl PubSub trait
+    mut pubsub: impl PubSub,
 ) {
     debug!("start room task (room_id: {})", room_id);
     let mut room = Room {
@@ -23,7 +22,6 @@ pub(crate) async fn room_task(
         connections: HashMap::new(),
     };
     let topic = format!("{}", room_id);
-    let mut pubsub = RedisPubSub::new(redis).await.unwrap();
     let mut sub = pubsub.subscribe(topic).await.unwrap();
     loop {
         // TODO: shutdown room
