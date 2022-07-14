@@ -9,6 +9,7 @@ mod rooms;
 pub mod server;
 pub mod transports;
 mod types;
+mod pubsub;
 
 pub type Result<T> = anyhow::Result<T>;
 pub type ConnectionID = types::ConnectionID;
