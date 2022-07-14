@@ -65,7 +65,8 @@ impl Dispatcher {
 
     pub async fn publish_to_room(&self, room_id: &RoomID, msg: MessageToRoom) {
         if let Some(sender) = self.room_sender(room_id) {
-            sender.send(msg).await.unwrap();
+            // Ignore the error, because if the receiver was closed, the target room has been deleted.
+            let _ = sender.send(msg).await;
         }
     }
 
@@ -98,7 +99,8 @@ impl Dispatcher {
         msg: MessageToConnection,
     ) {
         if let Some(sender) = self.connection_sender(connection_id) {
-            sender.send(msg).await.unwrap();
+            // Ignore the error, because if the receiver was closed, the target connection has been deleted.
+            let _ = sender.send(msg).await;
         }
     }
 
