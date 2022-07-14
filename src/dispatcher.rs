@@ -22,9 +22,16 @@ pub enum ServerShutdownReason {
 
 #[derive(Debug)]
 pub enum MessageToRoom {
-    Join { connection_id: ConnectionID },
-    Broadcast { payload: Bytes },
-    TestCountUp { sender: ConnectionID },
+    Join {
+        connection_id: ConnectionID,
+    },
+    Broadcast {
+        sender: ConnectionID,
+        payload: Bytes,
+    },
+    TestCountUp {
+        sender: ConnectionID,
+    },
 }
 
 #[derive(Clone, Debug)]

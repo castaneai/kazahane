@@ -113,7 +113,8 @@ impl ConnectionHandler {
             }
             (RoomStatus::Joined { room_id }, PacketType::BroadcastMessage) => {
                 let packet = packet.parse_payload().unwrap();
-                self.handle_broadcast(packet, *room_id, dispatcher).await;
+                self.handle_broadcast(packet, conn, *room_id, dispatcher)
+                    .await;
             }
             (RoomStatus::Joined { room_id }, PacketType::TestCountUp) => {
                 dispatcher
@@ -157,6 +158,7 @@ impl ConnectionHandler {
     async fn handle_broadcast(
         &self,
         packet: BroadcastMessagePacket,
+        conn: &impl Connection,
         room_id: RoomID,
         dispatcher: &Dispatcher,
     ) {
@@ -164,6 +166,7 @@ impl ConnectionHandler {
             .publish_to_room(
                 &room_id,
                 MessageToRoom::Broadcast {
+                    sender: conn.connection_id(),
                     payload: Bytes::from(packet.payload),
                 },
             )

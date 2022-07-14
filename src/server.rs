@@ -28,7 +28,7 @@ pub async fn start(listener: &TcpListener, redis: redis::Client, dispatcher: Arc
                 tokio::spawn(connection_task(conn, receiver, dispatcher.clone()));
             }
             Some(msg) = receiver.recv() => {
-                handle_message(msg, &mut rooms, dispatcher.clone(), &redis_conn).await;
+                handle_message(msg, &mut rooms, dispatcher.clone(), redis.clone(), &redis_conn).await;
             }
             else => break
         }
@@ -39,6 +39,7 @@ async fn handle_message(
     msg: MessageToServer,
     rooms: &mut RoomMap,
     dispatcher: Arc<Dispatcher>,
+    redis: redis::Client,
     redis_conn: &redis::aio::ConnectionManager,
 ) {
     match msg {
@@ -49,12 +50,14 @@ async fn handle_message(
             rooms.entry(room_id).or_insert_with(|| {
                 let room_receiver = dispatcher.register_room(room_id);
                 let room_state = RedisStateStore::new(room_id, redis_conn.clone());
+                let redis = redis.clone();
                 // TODO: instrument task
                 tokio::spawn(room_task(
                     room_id,
                     room_receiver,
                     dispatcher.clone(),
                     room_state,
+                    redis,
                 ));
             });
             dispatcher

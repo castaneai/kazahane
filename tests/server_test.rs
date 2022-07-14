@@ -74,12 +74,48 @@ mod tests {
 
         let server = spawn_test_server().await;
         let room_id = new_random_room_id();
+        let _ = server.connect_and_join(room_id).await;
+    }
+
+    #[tokio::test]
+    async fn broadcast() {
+        init_tracing();
+
+        let server = spawn_test_server().await;
+        let room_id = new_random_room_id();
         let mut c1 = server.connect_and_join(room_id).await;
+        let mut c2 = server.connect_and_join(room_id).await;
+        let mut c3 = server.connect_and_join(room_id).await;
 
         let packet = BroadcastMessagePacket::new("hello");
         c1.send(packet).await.unwrap();
-        let resp = c1.recv().await.unwrap();
-        assert_eq!(PacketType::BroadcastMessage, resp.packet_type);
+
+        let resp: BroadcastMessagePacket = c2.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.payload, b"hello");
+        let resp: BroadcastMessagePacket = c3.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.payload, b"hello");
+    }
+
+    #[tokio::test]
+    async fn broadcast_beyond_servers() {
+        init_tracing();
+
+        let server1 = spawn_test_server().await;
+        let server2 = spawn_test_server().await;
+        let server3 = spawn_test_server().await;
+
+        let room_id = new_random_room_id();
+        let mut c1 = server1.connect_and_join(room_id).await;
+        let mut c2 = server2.connect_and_join(room_id).await;
+        let mut c3 = server3.connect_and_join(room_id).await;
+
+        let packet = BroadcastMessagePacket::new("hello");
+        c1.send(packet).await.unwrap();
+
+        let resp: BroadcastMessagePacket = c2.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.payload, b"hello");
+        let resp: BroadcastMessagePacket = c3.recv().await.unwrap().parse_payload().unwrap();
+        assert_eq!(resp.payload, b"hello");
     }
 
     #[tokio::test]
