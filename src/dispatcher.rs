@@ -3,6 +3,7 @@ use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
+use tracing::debug;
 
 #[derive(Debug)]
 pub(crate) enum MessageToServer {
@@ -14,23 +15,16 @@ pub(crate) enum MessageToServer {
 
 #[derive(Debug)]
 pub(crate) enum MessageToRoom {
-    Join {
-        connection_id: ConnectionID,
-    },
-    Broadcast {
-        sender: ConnectionID,
-        payload: Bytes,
-    },
+    Join { connection_id: ConnectionID },
+    Broadcast { payload: Bytes },
+    TestCountUp { sender: ConnectionID },
 }
 
 #[derive(Debug)]
 pub(crate) enum MessageToConnection {
-    JoinResponse,
-    Broadcast {
-        room_id: RoomID,
-        sender: ConnectionID,
-        payload: Bytes,
-    },
+    JoinResponse { room_id: RoomID },
+    Broadcast { payload: Bytes },
+    TestCountUpResponse { counter: usize },
 }
 
 #[derive(Debug)]

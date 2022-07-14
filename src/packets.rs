@@ -1,4 +1,3 @@
-use crate::types::ConnectionID;
 use crate::RoomID;
 use anyhow::Context;
 use binrw::{binrw, BinWrite};
@@ -55,6 +54,9 @@ pub enum PacketType {
     JoinRoomResponse = 0x04,
     BroadcastMessage = 0x05,
     RoomNotification = 0x06,
+
+    TestCountUp = 0xDE,
+    TestCountUpResponse = 0xDF,
 }
 
 #[derive(Debug)]
@@ -141,8 +143,6 @@ impl IntoPacket for JoinRoomResponsePacket {
 #[binrw]
 #[brw(little)]
 pub struct BroadcastMessagePacket {
-    pub sender: uuid::Bytes,
-    pub room_id: uuid::Bytes,
     pub payload_size: u16,
     #[br(count = payload_size)]
     pub payload: Vec<u8>,
@@ -155,12 +155,10 @@ impl IntoPacket for BroadcastMessagePacket {
 }
 
 impl BroadcastMessagePacket {
-    pub fn new(sender: ConnectionID, room_id: RoomID, payload: impl Into<Vec<u8>>) -> Self {
+    pub fn new(payload: impl Into<Vec<u8>>) -> Self {
         let vec = payload.into();
         let size = vec.len() as u16;
         Self {
-            sender: sender.into_bytes(),
-            room_id: room_id.into_bytes(),
             payload_size: size,
             payload: vec,
         }
@@ -174,6 +172,38 @@ impl BroadcastMessagePacket {
 pub enum RoomNotificationType {
     Joined = 0x01,
     Left = 0x02,
+}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct TestCountUpPacket {}
+
+impl IntoPacket for TestCountUpPacket {
+    fn into_packet(self) -> crate::Result<Packet> {
+        Packet::new(PacketType::TestCountUp, self)
+    }
+}
+
+#[derive(Debug)]
+#[binrw]
+#[brw(little)]
+pub struct TestCountUpResponsePacket {
+    pub count: u64,
+}
+
+impl TestCountUpResponsePacket {
+    pub fn new(count: usize) -> Self {
+        Self {
+            count: count as u64,
+        }
+    }
+}
+
+impl IntoPacket for TestCountUpResponsePacket {
+    fn into_packet(self) -> crate::Result<Packet> {
+        Packet::new(PacketType::TestCountUpResponse, self)
+    }
 }
 
 #[cfg(test)]

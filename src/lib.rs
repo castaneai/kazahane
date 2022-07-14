@@ -1,14 +1,12 @@
 extern crate core;
-#[macro_use(defer)]
-extern crate scopeguard;
 
 pub mod connections;
 mod dispatcher;
 pub mod packets;
 pub mod pubsub;
+pub mod room_states;
 mod rooms;
 pub mod server;
-pub mod states;
 pub mod transports;
 mod types;
 

@@ -18,6 +18,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08f9b8508dccb7687a1d6c4ce66b2b0ecef467c94667de27d8d7fe1f8d2a9cdc"
 
 [[package]]
+name = "arc-swap"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5d78ce20460b82d3fa150275ed9d55e21064fc7951177baacf86a145c4a4b1f"
+
+[[package]]
 name = "array-init"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -356,7 +362,6 @@ dependencies = [
  "envconfig",
  "futures",
  "redis",
- "scopeguard",
  "tokio",
  "tokio-tungstenite",
  "tracing",
@@ -571,10 +576,12 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a80b5f38d7f5a020856a0e16e40a9cfabf88ae8f0e4c2dcd8a3114c1e470852"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "bytes",
  "combine",
  "dtoa",
+ "futures",
  "futures-util",
  "itoa 0.4.8",
  "percent-encoding",

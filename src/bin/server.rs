@@ -9,6 +9,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub struct Config {
     #[envconfig(from = "PORT", default = "8080")]
     pub listen_port: u16,
+
+    #[envconfig(from = "REDIS_ADDR", default = "redis://127.0.0.1")]
+    pub redis_addr: String,
 }
 
 #[tokio::main]
@@ -19,7 +22,8 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.listen_port));
     let listener = TcpListener::bind(&addr).await.expect("failed to bind");
-    server::start(&listener).await;
+    let redis = redis::Client::open(config.redis_addr).unwrap();
+    server::start(&listener, redis).await;
 }
 
 fn init_tracing() {
