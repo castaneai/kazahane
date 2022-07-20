@@ -29,6 +29,7 @@ pub(crate) trait Subscription {
 pub enum PubSubMessage {
     #[brw(magic = 0x01u8)]
     Broadcast {
+        sender_server: uuid::Bytes,
         sender: uuid::Bytes,
         #[br(temp)]
         #[bw(calc = payload.len() as u16)]

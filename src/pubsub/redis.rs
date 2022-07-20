@@ -71,7 +71,7 @@ impl Subscription for RedisSubscription {
 mod tests {
     use crate::pubsub::redis::RedisPubSub;
     use crate::pubsub::{PubSub, PubSubMessage};
-    use crate::types::ConnectionID;
+    use crate::types::{ConnectionID, ServerID};
 
     #[tokio::test]
     async fn test_redis() {
@@ -79,8 +79,10 @@ mod tests {
         let conn = client.get_tokio_connection_manager().await.unwrap();
         let mut pubsub = RedisPubSub::new(client, conn);
         let mut sub = pubsub.subscribe("test".to_string()).await.unwrap();
+        let sender_server = ServerID::new_v4();
         let sender = ConnectionID::new_v4();
         let msg = PubSubMessage::Broadcast {
+            sender_server: sender_server.into_bytes(),
             sender: sender.into_bytes(),
             payload: b"hello".to_vec(),
         };
@@ -89,6 +91,7 @@ mod tests {
         assert_eq!(
             msg,
             PubSubMessage::Broadcast {
+                sender_server: sender_server.into_bytes(),
                 sender: sender.into_bytes(),
                 payload: b"hello".to_vec()
             }

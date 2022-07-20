@@ -5,6 +5,7 @@ use crate::pubsub::redis::RedisPubSub;
 use crate::room_states::redis::RedisStateStore;
 use crate::rooms::room_task;
 use crate::transports::websocket;
+use crate::types::ServerID;
 use crate::RoomID;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,8 +15,10 @@ use tracing::{debug, info};
 type RoomMap = HashMap<RoomID, ()>;
 
 pub async fn start(listener: &TcpListener, redis: redis::Client, dispatcher: Arc<Dispatcher>) {
+    let server_id = ServerID::new_v4();
     debug!(
-        "start kazahane server (listening on {:?})",
+        "start kazahane server (server_id: {}, listening on {:?})",
+        server_id,
         listener.local_addr()
     );
     let mut rooms = RoomMap::new();
@@ -29,7 +32,7 @@ pub async fn start(listener: &TcpListener, redis: redis::Client, dispatcher: Arc
                 tokio::spawn(connection_task(conn, receiver, dispatcher.clone()));
             }
             Some(msg) = receiver.recv() => {
-                handle_message(msg, &mut rooms, dispatcher.clone(), redis.clone(), &redis_conn).await;
+                handle_message(server_id, msg, &mut rooms, dispatcher.clone(), redis.clone(), &redis_conn).await;
             }
             else => break
         }
@@ -37,6 +40,7 @@ pub async fn start(listener: &TcpListener, redis: redis::Client, dispatcher: Arc
 }
 
 async fn handle_message(
+    server_id: ServerID,
     msg: MessageToServer,
     rooms: &mut RoomMap,
     dispatcher: Arc<Dispatcher>,
@@ -54,6 +58,7 @@ async fn handle_message(
                 let pubsub = RedisPubSub::new(redis, redis_conn.clone());
                 // TODO: instrument task
                 tokio::spawn(room_task(
+                    server_id,
                     room_id,
                     room_receiver,
                     dispatcher.clone(),

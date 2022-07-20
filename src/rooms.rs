@@ -1,7 +1,7 @@
 use crate::dispatcher::{Dispatcher, MessageToConnection, MessageToRoom};
 use crate::pubsub::{PubSub, PubSubMessage, PubSubTopic};
 use crate::room_states::{RoomStateStore, StateData};
-use crate::types::{ConnectionID, RoomID};
+use crate::types::{ConnectionID, RoomID, ServerID};
 use bytes::Bytes;
 use core::convert::TryInto;
 use std::collections::HashMap;
@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error};
 
 pub(crate) async fn room_task(
+    server_id: ServerID,
     room_id: RoomID,
     mut receiver: mpsc::Receiver<MessageToRoom>,
     dispatcher: Arc<Dispatcher>,
@@ -18,6 +19,7 @@ pub(crate) async fn room_task(
 ) {
     debug!("start room task (room_id: {})", room_id);
     let mut room = Room {
+        server_id,
         room_id,
         connections: HashMap::new(),
     };
@@ -48,6 +50,7 @@ pub(crate) async fn room_task(
 
 #[derive(Debug)]
 struct Room {
+    server_id: ServerID,
     room_id: RoomID,
     connections: HashMap<ConnectionID, ()>,
 }
@@ -77,7 +80,10 @@ impl Room {
                 payload, sender, ..
             } => {
                 self.broadcast(sender, payload.clone(), dispatcher).await;
+
+                // Broadcast to all clients on other servers.
                 let msg = PubSubMessage::Broadcast {
+                    sender_server: self.server_id.into_bytes(),
                     sender: sender.into_bytes(),
                     payload: payload.to_vec(),
                 };
@@ -130,8 +136,16 @@ impl Room {
 
     async fn handle_pubsub_message(&self, msg: &PubSubMessage, dispatcher: &Dispatcher) {
         match msg {
-            PubSubMessage::Broadcast { sender, payload } => {
-                // TODO: error handling
+            PubSubMessage::Broadcast {
+                sender_server,
+                sender,
+                payload,
+            } => {
+                let sender_server = ServerID::from_bytes(*sender_server);
+                // Ignores messages published by its own server.
+                if sender_server == self.server_id {
+                    return;
+                }
                 let sender = ConnectionID::from_bytes(*sender);
                 self.broadcast(sender, Bytes::from(payload.to_vec()), dispatcher)
                     .await;
